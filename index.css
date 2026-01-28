@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600&family=Orbitron:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.font-display {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-card-title {
+  font-family: 'Cinzel', serif;
+}
+
+/* Holographic Foil Effect */
+.holo-card {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.holo-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.1) 25%,
+    rgba(236, 72, 153, 0.3) 30%,
+    rgba(59, 130, 246, 0.3) 35%,
+    rgba(255, 255, 255, 0.1) 40%,
+    transparent 45%
+  );
+  z-index: 2;
+  pointer-events: none;
+  animation: shine 4s infinite linear;
+  opacity: 0.6;
+  mix-blend-mode: color-dodge;
+}
+
+@keyframes shine {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-20%, -20%) rotate(0deg); }
+}
