@@ -26,10 +26,19 @@ export interface CardData {
   imageUrl: string;
   visualPrompt: string;
   varList: CardVarList;
+  priceSol: number;
+  metadataUri?: string;
+  imageCid?: string;
   mintAddress?: string;
 }
 
 export interface GenerationStatus {
   step: 'idle' | 'analyzing' | 'painting' | 'complete' | 'error';
   message: string;
+}
+
+export interface MintStatus {
+  step: 'idle' | 'uploading' | 'wallet' | 'submitted' | 'confirming' | 'confirmed' | 'error';
+  message: string;
+  txHash?: string;
 }

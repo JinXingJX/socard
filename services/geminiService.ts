@@ -52,7 +52,9 @@ const RESPONSE_SCHEMA: Schema = {
   required: ["name", "description", "rarity", "visualPrompt", "varList", "stats"]
 };
 
-export const generateCardMetadata = async (userPrompt: string): Promise<Omit<CardData, 'imageUrl' | 'id'>> => {
+export const generateCardMetadata = async (
+  userPrompt: string,
+): Promise<Omit<CardData, 'imageUrl' | 'id' | 'priceSol' | 'metadataUri' | 'imageCid' | 'mintAddress'>> => {
   const ai = getAiClient();
   
   const promptText = `Create a fantasy character card based on this prompt: "${userPrompt}".

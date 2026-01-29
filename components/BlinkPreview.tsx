@@ -8,7 +8,7 @@ interface BlinkPreviewProps {
 }
 
 const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
-  const actionUrl = `${window.location.origin}/api/actions/buy?cardId=${data.id}`;
+  const actionUrl = `${window.location.origin}/api/actions/buy?cardId=${data.id}&amount=${data.priceSol}`;
   const blinkUrl = `https://dial.to/?action=solana-action:${encodeURIComponent(actionUrl)}`;
   const [copied, setCopied] = useState(false);
 
@@ -53,14 +53,8 @@ const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
 
             {/* Action Buttons */}
             <div className="px-3 pb-3 flex gap-2">
-                <button className="flex-1 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 text-xs font-bold py-2 px-3 rounded-md transition-colors">
-                    Buy 0.1 SOL
-                </button>
-                <button className="flex-1 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 text-xs font-bold py-2 px-3 rounded-md transition-colors">
-                    Buy 0.5 SOL
-                </button>
                 <button className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-2 px-3 rounded-md transition-colors">
-                    Buy 1 SOL
+                    Buy {data.priceSol} SOL
                 </button>
             </div>
         </div>

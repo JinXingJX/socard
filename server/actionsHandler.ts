@@ -6,20 +6,30 @@ import {
   SystemProgram,
   clusterApiUrl,
   LAMPORTS_PER_SOL,
+  Keypair,
 } from '@solana/web3.js';
+import {
+  createAssociatedTokenAccountInstruction,
+  createTransferInstruction,
+  getAssociatedTokenAddressSync,
+} from '@solana/spl-token';
 import { getCard } from './cardStore';
 
 const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
 
-// Treasury address — receives SOL from Blink purchases.
-// Replace with your own devnet wallet for testing.
-const TREASURY = new PublicKey('11111111111111111111111111111112');
-
-const PRICE_OPTIONS = [
-  { label: 'Buy 0.1 SOL', amount: 0.1 },
-  { label: 'Buy 0.5 SOL', amount: 0.5 },
-  { label: 'Buy 1 SOL', amount: 1 },
-];
+function loadTreasuryKeypair(): Keypair {
+  const secret = process.env.TREASURY_SECRET_KEY;
+  if (!secret) {
+    throw new Error('Missing TREASURY_SECRET_KEY');
+  }
+  let secretKey: number[];
+  try {
+    secretKey = JSON.parse(secret);
+  } catch {
+    throw new Error('TREASURY_SECRET_KEY must be a JSON array.');
+  }
+  return Keypair.fromSecretKey(Uint8Array.from(secretKey));
+}
 
 function setCorsHeaders(res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -60,18 +70,21 @@ export async function handleActionGet(
   const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;
   const icon = `${origin}/api/cards/${cardId}/image`;
 
+  const priceSol = Number.isFinite(card.priceSol) ? card.priceSol : 0.1;
   const payload = {
     type: 'action',
     icon,
     title: `${card.name} — Solana ETF Card`,
     description: card.description,
-    label: 'Buy',
+    label: `Buy ${priceSol} SOL`,
     links: {
-      actions: PRICE_OPTIONS.map((opt) => ({
-        label: opt.label,
-        href: `${origin}/api/actions/buy?cardId=${cardId}&amount=${opt.amount}`,
-        type: 'transaction',
-      })),
+      actions: [
+        {
+          label: `Buy ${priceSol} SOL`,
+          href: `${origin}/api/actions/buy?cardId=${cardId}&amount=${priceSol}`,
+          type: 'transaction',
+        },
+      ],
     },
   };
 
@@ -95,21 +108,64 @@ export async function handleActionPost(
   const body = JSON.parse(await readBody(req));
   const account = new PublicKey(body.account);
 
-  const lamports = Math.round(amount * LAMPORTS_PER_SOL);
+  const priceSol = Number.isFinite(card.priceSol) ? card.priceSol : amount;
+  const lamports = Math.round(priceSol * LAMPORTS_PER_SOL);
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-  const tx = new Transaction().add(
+  if (!card.mintAddress) {
+    json(res, 400, { error: 'Card has no mintAddress' });
+    return;
+  }
+
+  let treasury: Keypair;
+  try {
+    treasury = loadTreasuryKeypair();
+  } catch (e) {
+    json(res, 500, { error: (e as Error).message || 'Treasury misconfigured' });
+    return;
+  }
+
+  const mint = new PublicKey(card.mintAddress);
+  const treasuryAta = getAssociatedTokenAddressSync(mint, treasury.publicKey);
+  const buyerAta = getAssociatedTokenAddressSync(mint, account);
+
+  const buyerAtaInfo = await connection.getAccountInfo(buyerAta);
+  const treasuryAtaInfo = await connection.getAccountInfo(treasuryAta);
+  if (!treasuryAtaInfo) {
+    json(res, 400, { error: 'Treasury token account not found for this mint' });
+    return;
+  }
+
+  const tx = new Transaction();
+  if (!buyerAtaInfo) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        account,
+        buyerAta,
+        account,
+        mint,
+      ),
+    );
+  }
+  tx.add(
     SystemProgram.transfer({
       fromPubkey: account,
-      toPubkey: TREASURY,
+      toPubkey: treasury.publicKey,
       lamports,
     }),
+    createTransferInstruction(
+      treasuryAta,
+      buyerAta,
+      treasury.publicKey,
+      1,
+    ),
   );
   tx.recentBlockhash = blockhash;
   tx.lastValidBlockHeight = lastValidBlockHeight;
   tx.feePayer = account;
 
+  tx.partialSign(treasury);
   const serialized = tx.serialize({ requireAllSignatures: false }).toString('base64');
 
-  json(res, 200, { transaction: serialized, message: `Buying ${card.name} for ${amount} SOL` });
+  json(res, 200, { transaction: serialized, message: `Buying ${card.name} for ${priceSol} SOL` });
 }

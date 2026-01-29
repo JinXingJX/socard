@@ -20,10 +20,14 @@ AI-powered Trading Card Game (TCG) card generator built with React 19 + Vite + T
    npm install
    ```
 
-2. Create `.env.local` and add your Gemini API key:
+2. Create `.env.local` and add your Gemini API key + Pinata + Treasury:
 
    ```
    GEMINI_API_KEY=your_key_here
+   PINATA_JWT=pinata_jwt_here
+   PINATA_GATEWAY=your_subdomain.mypinata.cloud
+   TREASURY_SECRET_KEY=[1,2,3,...] # JSON array
+   VITE_TREASURY_PUBKEY=your_treasury_pubkey
    ```
 
 3. Start the dev server:

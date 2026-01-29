@@ -6,6 +6,7 @@ import apiPlugin from './server/viteApiPlugin';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    Object.assign(process.env, env);
     return {
       server: {
         port: 3011,
@@ -29,7 +30,6 @@ export default defineConfig(({ mode }) => {
           define: {
             global: 'globalThis',
           },
-          inject: [path.resolve(__dirname, 'buffer-shim.js')],
         },
       },
       test: {

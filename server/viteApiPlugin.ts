@@ -1,4 +1,5 @@
 import type { Plugin } from 'vite';
+import { PinataSDK } from 'pinata';
 import { saveCard, getCard } from './cardStore';
 import { handleActionGet, handleActionPost } from './actionsHandler';
 import type { CardData } from '../types';
@@ -19,6 +20,26 @@ function readBody(req: import('http').IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString()));
     req.on('error', reject);
   });
+}
+
+function getPinataClient() {
+  const jwt = process.env.PINATA_JWT;
+  if (!jwt) {
+    throw new Error('Missing PINATA_JWT');
+  }
+  const gateway = process.env.PINATA_GATEWAY;
+  return new PinataSDK({
+    pinataJwt: jwt,
+    pinataGateway: gateway,
+  });
+}
+
+function toBase64(dataUrl: string): { base64: string; mime: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error('Invalid image data URL.');
+  }
+  return { mime: match[1], base64: match[2] };
 }
 
 export default function apiPlugin(): Plugin {
@@ -59,6 +80,55 @@ export default function apiPlugin(): Plugin {
           } catch (e) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          }
+          return;
+        }
+
+        // --- POST /api/pin — upload image + metadata to Pinata/IPFS ---
+        if (pathname === '/api/pin' && req.method === 'POST') {
+          try {
+            const body = JSON.parse(await readBody(req)) as {
+              name: string;
+              description: string;
+              rarity: string;
+              stats: { attack: number; defense: number };
+              imageUrl: string;
+            };
+            const pinata = getPinataClient();
+            const { base64 } = toBase64(body.imageUrl);
+
+            const imageUpload = await pinata.upload.public.base64(base64);
+
+            const imageCid = imageUpload.cid;
+            const metadata = {
+              name: body.name,
+              symbol: 'ETF',
+              description: body.description,
+              image: `ipfs://${imageCid}`,
+              attributes: [
+                { trait_type: 'Rarity', value: body.rarity },
+                { trait_type: 'Attack', value: body.stats?.attack ?? 0 },
+                { trait_type: 'Defense', value: body.stats?.defense ?? 0 },
+              ],
+              properties: {
+                files: [{ uri: `ipfs://${imageCid}`, type: 'image/png' }],
+                category: 'image',
+              },
+            };
+
+            const metadataUpload = await pinata.upload.public.json(metadata);
+
+            const metadataCid = metadataUpload.cid;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              imageCid,
+              metadataCid,
+              metadataUri: `ipfs://${metadataCid}`,
+              imageUri: `ipfs://${imageCid}`,
+            }));
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: (e as Error).message || 'Pinata upload failed' }));
           }
           return;
         }

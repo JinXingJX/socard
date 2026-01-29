@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { generateCardMetadata, generateCardImage } from './services/geminiService';
 import { mintCardToken } from './services/solanaService';
-import { CardData, GenerationStatus } from './types';
+import { CardData, GenerationStatus, MintStatus } from './types';
 import CardDisplay from './components/CardDisplay';
 import SolanaWallet from './components/SolanaWallet';
 import BlinkPreview from './components/BlinkPreview';
@@ -16,6 +16,26 @@ const App: React.FC = () => {
   const [isMinting, setIsMinting] = useState(false);
   const [mintedTx, setMintedTx] = useState<string | null>(null);
   const [showBlink, setShowBlink] = useState(false);
+  const [mintStatus, setMintStatus] = useState<MintStatus>({ step: 'idle', message: '' });
+  const [mintError, setMintError] = useState<string | null>(null);
+  const [priceSolInput, setPriceSolInput] = useState('0.1');
+
+  const saveCardForBlink = async (data: CardData) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      await fetch('/api/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      console.warn('Failed to save card to backend:', e);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -24,6 +44,9 @@ const App: React.FC = () => {
     setCardData(null);
     setMintedTx(null);
     setShowBlink(false);
+    setMintStatus({ step: 'idle', message: '' });
+    setMintError(null);
+    setPriceSolInput('0.1');
     setStatus({ step: 'analyzing', message: 'Consulting the Oracle...' });
 
     try {
@@ -38,6 +61,7 @@ const App: React.FC = () => {
         ...metadata,
         id: crypto.randomUUID(),
         imageUrl,
+        priceSol: 0.1,
       });
 
       setStatus({ step: 'complete', message: 'Card Forged!' });
@@ -52,27 +76,61 @@ const App: React.FC = () => {
       alert("Please connect your wallet first.");
       return;
     }
+    const priceSol = Number(priceSolInput);
+    if (!Number.isFinite(priceSol) || priceSol <= 0) {
+      alert('Please enter a valid price in SOL.');
+      return;
+    }
+    const treasuryPubkey = import.meta.env.VITE_TREASURY_PUBKEY as string | undefined;
+    if (!treasuryPubkey) {
+      alert('Missing VITE_TREASURY_PUBKEY. Please set it in your env.');
+      return;
+    }
     setIsMinting(true);
+    setMintError(null);
+    setMintStatus({ step: 'uploading', message: 'Uploading image & metadata to IPFS...' });
     try {
-      const { txHash, mintAddress } = await mintCardToken(publicKey, sendTransaction);
-      setMintedTx(txHash);
+      const pinRes = await fetch('/api/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cardData.name,
+          description: cardData.description,
+          rarity: cardData.rarity,
+          stats: cardData.stats,
+          imageUrl: cardData.imageUrl,
+        }),
+      });
+      if (!pinRes.ok) {
+        throw new Error(`Pinata upload failed (${pinRes.status}).`);
+      }
+      const { metadataUri, imageCid } = await pinRes.json();
 
-      const updatedCard = { ...cardData, mintAddress };
+      const { txHash, mintAddress } = await mintCardToken(
+        publicKey,
+        sendTransaction,
+        {
+          metadataUri,
+          name: cardData.name,
+          symbol: 'ETF',
+          treasuryPubkey,
+          onStatus: (statusUpdate) => setMintStatus({ ...statusUpdate }),
+        },
+      );
+      setMintedTx(txHash);
+      setMintStatus({ step: 'confirmed', message: 'Confirmed on Solana devnet.', txHash });
+
+      const updatedCard = { ...cardData, mintAddress, metadataUri, imageCid, priceSol };
       setCardData(updatedCard);
 
-      // Save card to backend for Blink serving
-      try {
-        await fetch('/api/cards', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedCard),
-        });
-      } catch (e) {
-        console.warn('Failed to save card to backend:', e);
-      }
+      // Save card to backend for Blink serving without blocking UI
+      void saveCardForBlink(updatedCard);
     } catch (error) {
       console.error('Mint failed:', error);
       alert('Minting failed. Make sure you are on Solana devnet and have SOL.');
+      const message = error instanceof Error ? error.message : 'Minting failed.';
+      setMintStatus({ step: 'error', message });
+      setMintError(message);
     } finally {
       setIsMinting(false);
     }
@@ -172,13 +230,46 @@ const App: React.FC = () => {
                   </div>
 
                   {!mintedTx ? (
-                    <button
-                      onClick={handleMintETF}
-                      disabled={isMinting || !connected}
-                      className="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold font-display tracking-wide shadow-lg shadow-orange-500/20 transition-all active:scale-95 disabled:opacity-70 disabled:grayscale"
-                    >
-                      {isMinting ? 'Confirming Transaction...' : !connected ? 'Connect Wallet to Mint' : 'Mint Card Token (Devnet)'}
-                    </button>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-400">Price (SOL)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={priceSolInput}
+                          onChange={(e) => setPriceSolInput(e.target.value)}
+                          className="flex-1 bg-black/50 border border-gray-700 rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        />
+                      </div>
+                      <button
+                        onClick={handleMintETF}
+                        disabled={isMinting || !connected}
+                        className="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold font-display tracking-wide shadow-lg shadow-orange-500/20 transition-all active:scale-95 disabled:opacity-70 disabled:grayscale"
+                      >
+                        {isMinting ? 'Confirming Transaction...' : !connected ? 'Connect Wallet to Mint' : 'Mint Card Token (Devnet)'}
+                      </button>
+                      {mintStatus.step !== 'idle' && (
+                        <div className="text-xs text-gray-400 flex items-center justify-between gap-2">
+                          <span>{mintStatus.message}</span>
+                          {mintStatus.txHash && (
+                            <a
+                              className="text-blue-400 hover:text-blue-300"
+                              href={`https://explorer.solana.com/tx/${mintStatus.txHash}?cluster=devnet`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              View Tx
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {mintError && (
+                        <div className="text-xs text-red-400">
+                          {mintError}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 text-sm flex items-center justify-center gap-2">

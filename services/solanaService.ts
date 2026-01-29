@@ -15,9 +15,13 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  AuthorityType,
+  createSetAuthorityInstruction,
 } from '@solana/spl-token';
+import { createCreateMetadataAccountV3Instruction, createCreateMasterEditionV3Instruction } from '@metaplex-foundation/mpl-token-metadata';
 
 const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
 const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
   return Promise.race([
@@ -62,21 +66,49 @@ export interface MintResult {
   mintAddress: string;
 }
 
+export interface MintOptions {
+  metadataUri: string;
+  name: string;
+  symbol?: string;
+  treasuryPubkey: string;
+  onStatus?: (status: { step: 'wallet' | 'submitted' | 'confirming'; message: string; txHash?: string }) => void;
+}
+
 /**
  * Create a real SPL token on devnet (decimals=0, supply=1) — a pseudo-NFT.
  */
 export const mintCardToken = async (
   publicKey: PublicKey,
   sendTransaction: (tx: Transaction, connection: Connection, options?: { signers?: Keypair[] }) => Promise<string>,
+  options: MintOptions,
 ): Promise<MintResult> => {
   await ensureDevnetBalance(publicKey);
 
   const mintKeypair = Keypair.generate();
+  const treasuryPublicKey = new PublicKey(options.treasuryPubkey);
   const lamports = await getMinimumBalanceForRentExemptMint(connection);
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
   // Derive the user's Associated Token Account for this mint
-  const ata = getAssociatedTokenAddressSync(mintKeypair.publicKey, publicKey);
+  const ata = getAssociatedTokenAddressSync(mintKeypair.publicKey, treasuryPublicKey);
+
+  const [metadataPda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('metadata'),
+      METADATA_PROGRAM_ID.toBuffer(),
+      mintKeypair.publicKey.toBuffer(),
+    ],
+    METADATA_PROGRAM_ID,
+  );
+  const [masterEditionPda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('metadata'),
+      METADATA_PROGRAM_ID.toBuffer(),
+      mintKeypair.publicKey.toBuffer(),
+      Buffer.from('edition'),
+    ],
+    METADATA_PROGRAM_ID,
+  );
 
   const transaction = new Transaction().add(
     // 1. Create the mint account
@@ -94,11 +126,11 @@ export const mintCardToken = async (
       publicKey,
       null,
     ),
-    // 3. Create Associated Token Account for the user
+    // 3. Create Associated Token Account for the treasury (holds inventory)
     createAssociatedTokenAccountInstruction(
       publicKey,
       ata,
-      publicKey,
+      treasuryPublicKey,
       mintKeypair.publicKey,
     ),
     // 4. Mint exactly 1 token
@@ -108,6 +140,50 @@ export const mintCardToken = async (
       publicKey,
       1,
     ),
+    // 5. Create on-chain metadata
+    createCreateMetadataAccountV3Instruction(
+      {
+        metadata: metadataPda,
+        mint: mintKeypair.publicKey,
+        mintAuthority: publicKey,
+        payer: publicKey,
+        updateAuthority: publicKey,
+      },
+      {
+        createMetadataAccountArgsV3: {
+          data: {
+            name: options.name,
+            symbol: options.symbol || 'ETF',
+            uri: options.metadataUri,
+            sellerFeeBasisPoints: 0,
+            creators: null,
+            collection: null,
+            uses: null,
+          },
+          isMutable: true,
+          collectionDetails: null,
+        },
+      },
+    ),
+    // 6. Create master edition (NFT semantics)
+    createCreateMasterEditionV3Instruction(
+      {
+        edition: masterEditionPda,
+        mint: mintKeypair.publicKey,
+        updateAuthority: publicKey,
+        mintAuthority: publicKey,
+        payer: publicKey,
+        metadata: metadataPda,
+      },
+      { createMasterEditionArgs: { maxSupply: 0 } },
+    ),
+    // 7. Revoke mint authority to make supply fixed
+    createSetAuthorityInstruction(
+      mintKeypair.publicKey,
+      publicKey,
+      AuthorityType.MintTokens,
+      null,
+    ),
   );
 
   transaction.recentBlockhash = blockhash;
@@ -116,8 +192,11 @@ export const mintCardToken = async (
   // The mintKeypair must sign to prove ownership of the new account
   transaction.partialSign(mintKeypair);
 
+  options.onStatus?.({ step: 'wallet', message: 'Waiting for wallet approval...' });
   const txHash = await sendTransaction(transaction, connection);
+  options.onStatus?.({ step: 'submitted', message: 'Transaction submitted. Awaiting confirmation...', txHash });
 
+  options.onStatus?.({ step: 'confirming', message: 'Confirming on Solana devnet...', txHash });
   await withTimeout(
     connection.confirmTransaction(
       { signature: txHash, blockhash, lastValidBlockHeight },
