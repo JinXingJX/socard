@@ -165,11 +165,12 @@ const App: React.FC = () => {
           {/* Left Column: Input & Controls */}
           <div className="space-y-8">
             <div className="space-y-4">
-              <h1 className="text-5xl md:text-6xl font-bold leading-tight">
+              <h1 className="text-5xl md:text-6xl font-bold leading-tight whitespace-nowrap">
                 Create <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">ETF Token</span> Cards
-                <br />
-                <span className="text-2xl md:text-3xl text-gray-400 font-normal">Powered by Gemini & Solana</span>
               </h1>
+              <div className="text-2xl md:text-3xl text-gray-400 font-normal">
+                Powered by Gemini & Solana
+              </div>
               <p className="text-gray-400 text-lg max-w-lg">
                 Enter a simple phrase. Our AI Director will craft a high-fidelity TCG card, ready to be minted as a fractionalized ETF asset on Solana.
               </p>
