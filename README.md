@@ -20,7 +20,7 @@ AI-powered Trading Card Game (TCG) card generator built with React 19 + Vite + T
    npm install
    ```
 
-2. Create `.env.local` and add your Gemini API key + Pinata + Treasury:
+2. Create `.env.local` and add your Gemini API key + Pinata + Treasury + Helius RPC:
 
    ```
    GEMINI_API_KEY=your_key_here
@@ -28,6 +28,8 @@ AI-powered Trading Card Game (TCG) card generator built with React 19 + Vite + T
    PINATA_GATEWAY=your_subdomain.mypinata.cloud
    TREASURY_SECRET_KEY=[1,2,3,...] # JSON array
    VITE_TREASURY_PUBKEY=your_treasury_pubkey
+   VITE_HELIUS_RPC_URL=https://devnet.helius-rpc.com/?api-key=YOUR_KEY
+   HELIUS_RPC_URL=https://devnet.helius-rpc.com/?api-key=YOUR_KEY
    ```
 
 3. Start the dev server:

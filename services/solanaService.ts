@@ -15,12 +15,13 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
-  AuthorityType,
-  createSetAuthorityInstruction,
 } from '@solana/spl-token';
 import { createCreateMetadataAccountV3Instruction, createCreateMasterEditionV3Instruction } from '@metaplex-foundation/mpl-token-metadata';
 
-const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+const rpcEndpoint =
+  (import.meta.env.VITE_HELIUS_RPC_URL as string | undefined)?.trim() ||
+  clusterApiUrl('devnet');
+const connection = new Connection(rpcEndpoint, 'confirmed');
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
 
 const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
@@ -81,13 +82,13 @@ export const mintCardToken = async (
   publicKey: PublicKey,
   sendTransaction: (tx: Transaction, connection: Connection, options?: { signers?: Keypair[] }) => Promise<string>,
   options: MintOptions,
+  signTransaction?: (tx: Transaction) => Promise<Transaction>,
 ): Promise<MintResult> => {
   await ensureDevnetBalance(publicKey);
 
   const mintKeypair = Keypair.generate();
   const treasuryPublicKey = new PublicKey(options.treasuryPubkey);
   const lamports = await getMinimumBalanceForRentExemptMint(connection);
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
   // Derive the user's Associated Token Account for this mint
   const ata = getAssociatedTokenAddressSync(mintKeypair.publicKey, treasuryPublicKey);
@@ -119,12 +120,12 @@ export const mintCardToken = async (
       lamports,
       programId: TOKEN_PROGRAM_ID,
     }),
-    // 2. Initialize as a mint (decimals=0, authority=user, no freeze authority)
+    // 2. Initialize as a mint (decimals=0, authority=user, freeze authority=user)
     createInitializeMintInstruction(
       mintKeypair.publicKey,
       0,
       publicKey,
-      null,
+      publicKey,
     ),
     // 3. Create Associated Token Account for the treasury (holds inventory)
     createAssociatedTokenAccountInstruction(
@@ -177,15 +178,17 @@ export const mintCardToken = async (
       },
       { createMasterEditionArgs: { maxSupply: 0 } },
     ),
-    // 7. Revoke mint authority to make supply fixed
-    createSetAuthorityInstruction(
-      mintKeypair.publicKey,
-      publicKey,
-      AuthorityType.MintTokens,
-      null,
-    ),
+    // 7. (Optional) Revoke mint authority to make supply fixed.
+    // Removed for now to avoid authority mismatch errors; can be done in a follow-up tx.
   );
 
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  const currentBlockHeight = await connection.getBlockHeight('confirmed');
+  if (lastValidBlockHeight <= currentBlockHeight) {
+    throw new Error(
+      `Stale blockhash from RPC ${connection.rpcEndpoint}. lastValidBlockHeight=${lastValidBlockHeight} currentBlockHeight=${currentBlockHeight}`,
+    );
+  }
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = publicKey;
 
@@ -193,7 +196,40 @@ export const mintCardToken = async (
   transaction.partialSign(mintKeypair);
 
   options.onStatus?.({ step: 'wallet', message: 'Waiting for wallet approval...' });
-  const txHash = await sendTransaction(transaction, connection);
+  let txHash: string;
+  try {
+    if (signTransaction) {
+      const signed = await signTransaction(transaction);
+      txHash = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+        maxRetries: 3,
+      });
+    } else {
+      txHash = await sendTransaction(transaction, connection, {
+        preflightCommitment: 'confirmed',
+        maxRetries: 3,
+      });
+    }
+  } catch (error) {
+    console.error('sendTransaction failed:', error);
+    if (error instanceof Error) {
+      console.error('sendTransaction error props:', Object.getOwnPropertyNames(error));
+      console.error({
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+    } else {
+      console.error('sendTransaction threw non-Error:', error);
+    }
+    const errorAny = error as unknown as Record<string, unknown>;
+    console.error('sendTransaction error cause:', errorAny?.cause);
+    console.error('sendTransaction error data:', errorAny?.data);
+    console.error('sendTransaction error logs:', errorAny?.logs);
+    console.error('sendTransaction error error:', errorAny?.error);
+    throw error;
+  }
   options.onStatus?.({ step: 'submitted', message: 'Transaction submitted. Awaiting confirmation...', txHash });
 
   options.onStatus?.({ step: 'confirming', message: 'Confirming on Solana devnet...', txHash });
@@ -202,7 +238,7 @@ export const mintCardToken = async (
       { signature: txHash, blockhash, lastValidBlockHeight },
       'confirmed',
     ),
-    30000,
+    120000,
     'Transaction confirmation',
   );
 

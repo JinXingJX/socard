@@ -9,7 +9,7 @@ import BlinkPreview from './components/BlinkPreview';
 import { Wand2, Zap, LayoutTemplate, Coins, CheckCircle2, ArrowRight, Share2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const { connected, publicKey, sendTransaction } = useWallet();
+  const { connected, publicKey, sendTransaction, signTransaction, wallet } = useWallet();
   const [prompt, setPrompt] = useState('');
   const [status, setStatus] = useState<GenerationStatus>({ step: 'idle', message: '' });
   const [cardData, setCardData] = useState<CardData | null>(null);
@@ -76,6 +76,11 @@ const App: React.FC = () => {
       alert("Please connect your wallet first.");
       return;
     }
+    if (wallet?.adapter?.name && wallet.adapter.name !== 'Phantom') {
+      console.warn('Connected wallet adapter:', wallet.adapter.name);
+      alert(`Please select Phantom wallet. Current: ${wallet.adapter.name}`);
+      return;
+    }
     const priceSol = Number(priceSolInput);
     if (!Number.isFinite(priceSol) || priceSol <= 0) {
       alert('Please enter a valid price in SOL.');
@@ -116,6 +121,7 @@ const App: React.FC = () => {
           treasuryPubkey,
           onStatus: (statusUpdate) => setMintStatus({ ...statusUpdate }),
         },
+        signTransaction ?? undefined,
       );
       setMintedTx(txHash);
       setMintStatus({ step: 'confirmed', message: 'Confirmed on Solana devnet.', txHash });

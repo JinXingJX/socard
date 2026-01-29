@@ -15,7 +15,8 @@ import {
 } from '@solana/spl-token';
 import { getCard } from './cardStore';
 
-const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+const rpcEndpoint = process.env.HELIUS_RPC_URL || clusterApiUrl('devnet');
+const connection = new Connection(rpcEndpoint, 'confirmed');
 
 function loadTreasuryKeypair(): Keypair {
   const secret = process.env.TREASURY_SECRET_KEY;
