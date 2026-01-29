@@ -61,6 +61,39 @@
   - 服务端 RPC 地址（devnet），用于 Action 相关交易构建与查询。
   - 与前端保持同一集群，避免网络不一致问题。
 
+## 获取密钥与官方链接
+
+- **Gemini API Key**（Google AI Studio）
+  - 入口：`https://ai.google.dev/aistudio`
+  - 获取 API Key 指引：`https://ai.google.dev/palm_docs/setup`
+- **Pinata API / JWT & Gateway**
+  - 文档总览：`https://docs.pinata.cloud/quickstart`
+  - API 介绍：`https://docs.pinata.cloud/api-reference/introduction`
+- **Helius API Key**
+  - 鉴权与创建 Key 指引：`https://www.helius.dev/docs/api-reference/authentication`
+- **Solana Devnet Faucet（领测试 SOL）**
+  - Faucet：`https://faucet.solana.com/`
+  - 官方说明：`https://solana.com/developers/cookbook/development/test-sol`
+- **ngrok（用于暴露本地端口测试 Blink）**
+  - 下载与安装：`https://ngrok.com/download`
+  - 快速上手：`https://ngrok.com/docs/getting-started/`
+
+## Devnet 钱包充值步骤
+
+1. 打开 Faucet：`https://faucet.solana.com/`
+2. 粘贴你的钱包地址（Devnet），请求测试 SOL。
+3. 如果提示额度不足，使用 GitHub 登录提升额度。
+
+## ngrok 使用（用于 Blink 购买链路）
+
+dial.to 无法访问 `localhost`，测试 Blink 购买必须用公网 URL。
+
+```bash
+ngrok http 3011
+```
+
+运行后会得到一个公网地址（如 `https://xxxx.ngrok-free.app`），将 Blink 链接里的 `http://localhost:3011` 替换为该地址即可。
+
 ## 常用命令
 
 | 命令 | 说明 |
@@ -104,11 +137,23 @@
 4. 点击 “Mint Card Token”，钱包签名并发送 devnet 交易。
 5. 生成 Blink 链接分享。
 
+## 常见报错排查
+
+- **401 / invalid api key**
+  - Helius API Key 无效或被禁用。请在 Helius Dashboard 重新生成并更新 `.env.local`。
+- **block height exceeded / blockhash expired**
+  - 交易签名时间过长或 blockhash 过期。请重新发起交易。
+- **Unexpected error（钱包签名阶段）**
+  - 常见原因是 RPC/网络不一致或钱包未处于 Devnet。
+  - 确认钱包网络为 Devnet，并重启 `npm run dev` 让前端读取新 env。
+- **Transaction simulation failed: Cannot create NFT with no Freeze Authority**
+  - Freeze authority 为空导致创建 Master Edition 失败。请确保初始化 mint 时带 freeze authority。
+- **Transaction simulation failed: owner does not match**
+  - SetAuthority 的 owner 不匹配，建议将撤销 mint authority 放到单独交易里执行。
+- **Blink 购买 timeout**
+  - dial.to 无法访问 localhost，必须用 ngrok 暴露公网地址。
+
 ## 备注
 
 - **一定要用 devnet**（钱包与 RPC 保持一致）。
-- dial.to 无法访问 `localhost`，如果要测试 Blink 购买链路，请用 `ngrok` 暴露本地端口：
-  ```bash
-  ngrok http 3011
-  ```
-  然后用 ngrok 的公网地址生成 Blink 链接。
+- 不要把 API Key 明文贴到聊天或提交到 Git。
