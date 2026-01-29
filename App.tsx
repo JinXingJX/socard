@@ -9,7 +9,7 @@ import BlinkPreview from './components/BlinkPreview';
 import { Wand2, Zap, LayoutTemplate, Coins, CheckCircle2, ArrowRight, Share2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const { connected, publicKey, signTransaction } = useWallet();
+  const { connected, publicKey, sendTransaction } = useWallet();
   const [prompt, setPrompt] = useState('');
   const [status, setStatus] = useState<GenerationStatus>({ step: 'idle', message: '' });
   const [cardData, setCardData] = useState<CardData | null>(null);
@@ -48,14 +48,28 @@ const App: React.FC = () => {
   };
 
   const handleMintETF = async () => {
-    if (!connected || !publicKey || !signTransaction) {
+    if (!connected || !publicKey || !sendTransaction || !cardData) {
       alert("Please connect your wallet first.");
       return;
     }
     setIsMinting(true);
     try {
-      const txHash = await mintCardToken(publicKey, signTransaction);
+      const { txHash, mintAddress } = await mintCardToken(publicKey, sendTransaction);
       setMintedTx(txHash);
+
+      const updatedCard = { ...cardData, mintAddress };
+      setCardData(updatedCard);
+
+      // Save card to backend for Blink serving
+      try {
+        await fetch('/api/cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedCard),
+        });
+      } catch (e) {
+        console.warn('Failed to save card to backend:', e);
+      }
     } catch (error) {
       console.error('Mint failed:', error);
       alert('Minting failed. Make sure you are on Solana devnet and have SOL.');

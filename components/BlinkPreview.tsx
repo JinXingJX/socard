@@ -8,7 +8,8 @@ interface BlinkPreviewProps {
 }
 
 const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
-  const blinkUrl = `https://dial.to/?action=solana-action:${mintedTx}`;
+  const actionUrl = `${window.location.origin}/api/actions/buy?cardId=${data.id}`;
+  const blinkUrl = `https://dial.to/?action=solana-action:${encodeURIComponent(actionUrl)}`;
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -37,33 +38,36 @@ const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
                 <img src={data.imageUrl} alt="Blink Cover" className="w-full h-full object-cover object-top" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#1a1b23] to-transparent opacity-60"></div>
             </div>
-            
+
             {/* Card Content */}
             <div className="p-3 relative -mt-8">
                 <h3 className="text-gray-100 font-bold text-sm truncate">{data.name} // ETF Asset</h3>
                 <p className="text-gray-400 text-xs mt-1 line-clamp-2">{data.description}</p>
-                
-                {/* Simulated Action Domain */}
+
+                {/* Action Domain */}
                 <div className="flex items-center gap-1.5 mt-3 text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <span>solana-actions.vercel.app</span>
+                    <span>{window.location.host}</span>
                 </div>
             </div>
 
             {/* Action Buttons */}
             <div className="px-3 pb-3 flex gap-2">
                 <button className="flex-1 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 text-xs font-bold py-2 px-3 rounded-md transition-colors">
-                    Buy 1 SOL
+                    Buy 0.1 SOL
+                </button>
+                <button className="flex-1 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/50 text-purple-300 text-xs font-bold py-2 px-3 rounded-md transition-colors">
+                    Buy 0.5 SOL
                 </button>
                 <button className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-2 px-3 rounded-md transition-colors">
-                    Buy 10 SOL
+                    Buy 1 SOL
                 </button>
             </div>
         </div>
       </div>
 
-      {/* Explorer Link */}
-      <div className="px-4 pt-2">
+      {/* Explorer Links */}
+      <div className="px-4 pt-2 space-y-1">
         <a
           href={`https://explorer.solana.com/tx/${mintedTx}?cluster=devnet`}
           target="_blank"
@@ -73,6 +77,17 @@ const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
           <ExternalLink className="w-3 h-3" />
           View transaction on Solana Explorer
         </a>
+        {data.mintAddress && (
+          <a
+            href={`https://explorer.solana.com/address/${data.mintAddress}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View token mint on Solana Explorer
+          </a>
+        )}
       </div>
 
       {/* Share Section */}
@@ -95,6 +110,9 @@ const BlinkPreview: React.FC<BlinkPreviewProps> = ({ data, mintedTx }) => {
                 Powered by Blinks <ExternalLink className="w-2 h-2" />
             </span>
         </div>
+        <p className="text-[10px] text-yellow-500/70 mt-2 px-1">
+            Note: dial.to cannot reach localhost. Use <code className="bg-black/40 px-1 rounded">ngrok http 3011</code> for external access.
+        </p>
       </div>
     </div>
   );

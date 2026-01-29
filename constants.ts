@@ -56,4 +56,4 @@ Background & Material: The background is a scene atmosphere consistent with the 
 
 Border & Text: Decorative border around the entire frame matching the theme (emphasizing card design feel). A stylized banner at the bottom reads "{Name Banner Text}", with font style matching the media/work and clearly readable.
 
-Quality & Constraints: High detail, high-contrast readability, avoid text overflow and blurred characters, avoid the subject being occluded by effects, avoid overly complex backgrounds competing with the subject.`;
+Quality & Constraints: High detail, high-contrast readability, avoid text overflow and blurred characters, avoid the subject being occluded by effects, avoid overly complex backgrounds competing with the subject. CRITICAL: Render ONLY the card itself as a flat digital illustration — do NOT show any hands, fingers, or people holding the card. The card must appear as a standalone graphic, NOT a photograph of a physical card being held.`;

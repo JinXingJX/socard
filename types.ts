@@ -26,6 +26,7 @@ export interface CardData {
   imageUrl: string;
   visualPrompt: string;
   varList: CardVarList;
+  mintAddress?: string;
 }
 
 export interface GenerationStatus {

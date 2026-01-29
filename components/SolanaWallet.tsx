@@ -4,7 +4,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { Wallet, Loader2, LogOut } from 'lucide-react';
 
 const SolanaWallet: React.FC = () => {
-  const { publicKey, connected, connecting, disconnect } = useWallet();
+  const { publicKey, connected, connecting, disconnect, select } = useWallet();
   const { setVisible } = useWalletModal();
 
   const handleConnect = () => {
@@ -21,7 +21,7 @@ const SolanaWallet: React.FC = () => {
           <span className="text-sm font-mono text-purple-200">{short}</span>
         </div>
         <button
-          onClick={() => disconnect()}
+          onClick={() => { disconnect(); select(null); }}
           className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
           title="Disconnect wallet"
         >
